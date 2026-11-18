@@ -7,6 +7,7 @@
 <title>Order Portal</title>
 <style>
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f3f3f3;color:#111;line-height:1.5}
 .hero{background:#000;color:#fff;padding:44px 16px 40px;text-align:center}
 .hero h1{font-size:2rem;letter-spacing:.02em;margin:0 0 10px;font-weight:800}
@@ -49,47 +50,115 @@ input:focus,textarea:focus{outline:2px solid #111;border-color:#111}
 .err{color:#b00020;font-weight:600;margin-top:10px}
 pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:10px;padding:12px;font-size:.85rem}
 .empty{padding:48px 20px;color:#555;text-align:center;background:#fff;border:1px dashed #aaa;border-radius:14px}
+.steps{display:flex;justify-content:center;gap:6px;margin-top:20px;flex-wrap:wrap}
+.step{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;padding:6px 14px;border:1px solid #666;border-radius:999px;color:#aaa}
+.step.on{background:#fff;color:#000;border-color:#fff;font-weight:700}
+.step.done{color:#fff;border-color:#fff}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#000;color:#fff;padding:12px 16px;display:flex;justify-content:center;z-index:10;box-shadow:0 -4px 14px rgba(0,0,0,.2)}
+.bar .in{width:100%;max-width:760px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bar .tot{font-weight:800;font-size:1.1rem}
+.bar .cnt{color:#ccc;font-size:.85rem}
+.bar button{background:#fff;color:#000;border:0;border-radius:10px;padding:12px 20px;font-weight:800;font-size:1rem;cursor:pointer}
+.bar button[disabled]{opacity:.4;cursor:not-allowed}
+.back{background:none;border:0;padding:0;margin:0 0 14px;font-weight:700;cursor:pointer;color:#111;text-decoration:underline;font-size:.95rem}
+.sline{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #eee}
+.sline .l{flex:1}
+.sline .sub{color:#555;font-size:.85rem}
+.done-box{text-align:center}
+.done-box .ok{width:64px;height:64px;border-radius:50%;background:#000;color:#fff;font-size:2rem;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.done-box h2{margin:0 0 4px;font-size:1.5rem}
+.ordno{font-family:ui-monospace,Menlo,Consolas,monospace;background:#f3f3f3;border-radius:8px;padding:4px 10px;display:inline-block;margin:6px 0 14px}
+.bigtotal{font-size:2rem;font-weight:800;margin:4px 0 14px}
+.next{text-align:left;border:2px solid #000;border-radius:12px;padding:16px;margin:16px 0}
+.next h3{margin:0 0 8px;font-size:1rem;text-transform:uppercase;letter-spacing:.08em}
+.next ol{margin:0;padding-left:20px}
+.next li{margin:6px 0}
+a.go{display:block;text-align:center;text-decoration:none}
 @media(max-width:520px){.hero h1{font-size:1.6rem}.row{padding:14px}}
 </style>
 </head>
 <body>
 <div class="hero">
   <h1 id="title">Order Portal</h1>
-  <p class="sub">Choose your items and quantities, then send your order by text.</p>
-  <div class="rule"></div>
+  <p class="sub">Choose your items, enter your details, then pay and send your order.</p>
+  <div class="steps" id="steps">
+    <span class="step on" data-s="1">1 Choose items</span>
+    <span class="step" data-s="2">2 Your details</span>
+    <span class="step" data-s="3">3 Confirm</span>
+  </div>
 </div>
+
 <div class="wrap">
-  <div class="chips" id="chips"></div>
-  <div id="list"><div class="empty">Loading...</div></div>
+  <!-- STEP 1 -->
+  <div id="vShop">
+    <div class="chips" id="chips"></div>
+    <div id="list"><div class="empty">Loading...</div></div>
+  </div>
 
-  <div class="panel" id="panel" hidden>
-    <h2>Your order</h2>
-    <div class="line"><span>Items</span><span id="count">0</span></div>
-    <div class="line"><span>Subtotal</span><span id="sub">$0.00</span></div>
-    <div class="line"><span>Shipping</span><span id="ship">$0.00</span></div>
-    <div class="line total"><span>Total</span><span id="tot">$0.00</span></div>
-
-    <div class="pay" id="pay" hidden></div>
-
-    <label for="name">First and last name</label>
-    <input id="name" autocomplete="name" placeholder="Jane Doe">
-    <label for="street">Shipping address</label>
-    <input id="street" autocomplete="address-line1" placeholder="Street address">
-    <input id="apt" autocomplete="address-line2" placeholder="Apt / Suite (optional)" style="margin-top:10px">
-    <div class="two" style="margin-top:10px">
-      <input id="city" autocomplete="address-level2" placeholder="City">
-      <input id="state" autocomplete="address-level1" placeholder="State">
+  <!-- STEP 2 -->
+  <div id="vCheck" hidden>
+    <button class="back" id="backShop" type="button">&larr; Back to items</button>
+    <div class="panel" style="margin-top:0">
+      <h2>Your order</h2>
+      <div id="summary"></div>
+      <div class="line"><span>Subtotal</span><span id="sub">$0.00</span></div>
+      <div class="line"><span>Shipping</span><span id="ship">$0.00</span></div>
+      <div class="line total"><span>Total</span><span id="tot">$0.00</span></div>
     </div>
-    <input id="zip" autocomplete="postal-code" inputmode="numeric" placeholder="ZIP code" style="margin-top:10px">
-    <label for="notes">Notes (optional)</label>
-    <textarea id="notes" rows="3" placeholder="Anything we should know?"></textarea>
+    <div class="panel">
+      <h2>Shipping details</h2>
+      <label for="name">First and last name</label>
+      <input id="name" autocomplete="name" placeholder="Jane Doe">
+      <label for="phone">Your phone number</label>
+      <input id="phone" type="tel" autocomplete="tel" placeholder="(555) 555-5555">
+      <label for="street">Shipping address</label>
+      <input id="street" autocomplete="address-line1" placeholder="Street address">
+      <input id="apt" autocomplete="address-line2" placeholder="Apt / Suite (optional)" style="margin-top:10px">
+      <div class="two" style="margin-top:10px">
+        <input id="city" autocomplete="address-level2" placeholder="City">
+        <input id="state" autocomplete="address-level1" placeholder="State">
+      </div>
+      <input id="zip" autocomplete="postal-code" inputmode="numeric" placeholder="ZIP code" style="margin-top:10px">
+      <label for="notes">Notes (optional)</label>
+      <textarea id="notes" rows="3" placeholder="Anything we should know?"></textarea>
+      <div class="err" id="err" hidden></div>
+      <button class="go" id="place">Place order</button>
+      <div class="small">You pay after you place the order. The next screen shows how.</div>
+    </div>
+  </div>
 
-    <div class="err" id="err" hidden></div>
-    <button class="go" id="go">Send order by text</button>
-    <button class="ghost" id="copy" type="button">Copy order instead</button>
-    <div class="small">Opens your messaging app with the order already written out. Press send.</div>
-    <label>What gets sent</label>
-    <pre id="preview"></pre>
+  <!-- STEP 3 -->
+  <div id="vDone" hidden>
+    <div class="panel done-box" style="margin-top:0">
+      <div class="ok">&#10003;</div>
+      <h2>Order placed</h2>
+      <div>Order number</div>
+      <div class="ordno" id="ordno"></div>
+      <div>Amount due</div>
+      <div class="bigtotal" id="dueAmt"></div>
+      <div class="err" id="saveErr" hidden></div>
+      <div class="next">
+        <h3>What to do next</h3>
+        <ol>
+          <li id="payStep">Pay the amount due.</li>
+          <li>Send your order to us so we can match your payment.</li>
+        </ol>
+        <div class="pay" id="payNote" hidden></div>
+      </div>
+      <a class="go" id="smsBtn" href="#" hidden>Text us your order</a>
+      <button class="ghost" id="copyBtn" type="button" style="margin-top:10px">Copy order to send</button>
+      <div class="small" id="copyHint">Copy your order, then paste it into a text, email or chat to us.</div>
+      <label style="text-align:left">Your order</label>
+      <pre id="doneText" style="text-align:left"></pre>
+      <button class="ghost" id="again" type="button">Start a new order</button>
+    </div>
+  </div>
+</div>
+
+<div class="bar" id="bar" hidden>
+  <div class="in">
+    <div><div class="tot" id="barTot">$0.00</div><div class="cnt" id="barCnt">0 items</div></div>
+    <button id="toCheck" disabled>Review order</button>
   </div>
 </div>
 
@@ -102,8 +171,20 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
   var rep = (new URLSearchParams(location.search).get('f') || '').trim().toLowerCase().replace(/[^a-z0-9_\-]/g,'').slice(0,60);
   var money = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
   var settings = {site_name:'Order Portal',order_phone:'',payment_note:'',shipping_fee:0,free_shipping_over:null};
-  var products = [], qty = {}, cat = 'All';
+  var products = [], qty = {}, cat = 'All', orderId = newId();
+  var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   var $ = function(id){return document.getElementById(id)};
+  function newId(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()); }
+
+  function setStep(n){
+    $('vShop').hidden = n!==1; $('vCheck').hidden = n!==2; $('vDone').hidden = n!==3;
+    $('bar').hidden = !(n===1 && products.length);
+    document.querySelectorAll('.step').forEach(function(el){
+      var k = Number(el.getAttribute('data-s'));
+      el.className = 'step' + (k===n?' on':(k<n?' done':''));
+    });
+    window.scrollTo(0,0);
+  }
 
   function load(){
     Promise.all([
@@ -114,8 +195,8 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
       products = r[1].data || [];
       document.title = settings.site_name;
       $('title').textContent = settings.site_name;
-      if(settings.payment_note){ $('pay').hidden = false; $('pay').textContent = settings.payment_note; }
       render();
+      setStep(1);
       sb.from('visits').insert({rep:rep}).then(function(){});
     }).catch(function(){
       $('list').innerHTML = '<div class="empty">This page could not load. Please try again later.</div>';
@@ -136,7 +217,7 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
       });
     }
     var list = $('list'); list.innerHTML = '';
-    if(!products.length){ list.innerHTML = '<div class="empty">No products are listed yet.</div>'; $('panel').hidden = true; return; }
+    if(!products.length){ list.innerHTML = '<div class="empty">No products are listed yet.</div>'; $('bar').hidden = true; return; }
     var shown = products.filter(function(p){ return cat==='All' || p.category===cat; });
     var last = null, grid = null;
     shown.forEach(function(p){
@@ -151,8 +232,6 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
       var body = document.createElement('div'); body.className='cbody';
       var n = document.createElement('div'); n.className='pname'; n.textContent = p.name;
       var sz = document.createElement('div'); sz.className='psize'; sz.textContent = p.size || '';
-      var pr = document.createElement('div'); pr.className='price'; pr.textContent = money.format(Number(p.price));
-      var foot = document.createElement('div'); foot.className='cfoot';
       var desc = null, more = null;
       if(p.description){
         desc = document.createElement('div'); desc.className='pdesc'; desc.textContent = p.description;
@@ -161,6 +240,8 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
           more.onclick = function(){ var o = desc.classList.toggle('open'); more.textContent = o ? 'Show less' : 'Read more'; };
         }
       }
+      var pr = document.createElement('div'); pr.className='price'; pr.textContent = money.format(Number(p.price));
+      var foot = document.createElement('div'); foot.className='cfoot';
       var q = document.createElement('div'); q.className='qty';
       var minus = document.createElement('button'); minus.textContent = '\u2212'; minus.setAttribute('aria-label','Remove one');
       var num = document.createElement('span'); num.textContent = qty[p.id]||0;
@@ -172,7 +253,6 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
       body.appendChild(n); if(p.size) body.appendChild(sz); if(desc) body.appendChild(desc); if(more) body.appendChild(more); body.appendChild(foot);
       card.appendChild(ph); card.appendChild(body); grid.appendChild(card);
     });
-    $('panel').hidden = false;
     totals();
   }
 
@@ -196,50 +276,84 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
   function orderText(c, id){
     var addr = val('street') + (val('apt') ? ', ' + val('apt') : '') + ', ' + val('city') + ', ' + val('state') + ' ' + val('zip');
     var lines = ['New order' + (rep ? ' (from ' + rep + ')' : ''), 'Order ' + id.slice(0,8), '',
-      'Name: ' + val('name'), 'Ship to: ' + addr, '', 'Items:'];
+      'Name: ' + val('name'), 'Phone: ' + val('phone'), 'Ship to: ' + addr, '', 'Items:'];
     c.items.forEach(function(i){ lines.push(i.qty + ' x ' + i.name + (i.size ? ' (' + i.size + ')' : '') + ' = ' + money.format(i.price*i.qty)); });
     lines.push('', 'Subtotal: ' + money.format(c.sub), 'Shipping: ' + money.format(c.fee), 'Total: ' + money.format(c.total));
     if(val('notes')) lines.push('', 'Notes: ' + val('notes'));
     return lines.join('\n');
   }
-  var previewId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
   function totals(){
     var c = calc();
-    $('count').textContent = c.count; $('sub').textContent = money.format(c.sub);
-    $('ship').textContent = money.format(c.fee); $('tot').textContent = money.format(c.total);
-    $('preview').textContent = c.count ? orderText(c, previewId) : 'Add items to see your order.';
-    $('go').disabled = !c.count;
+    $('barTot').textContent = money.format(c.total);
+    $('barCnt').textContent = c.count + (c.count===1?' item':' items');
+    $('toCheck').disabled = !c.count;
+    $('sub').textContent = money.format(c.sub); $('ship').textContent = money.format(c.fee); $('tot').textContent = money.format(c.total);
   }
-  ['name','street','apt','city','state','zip','notes'].forEach(function(id){ $(id).addEventListener('input', totals); });
+
+  $('toCheck').onclick = function(){
+    var c = calc(); if(!c.count) return;
+    var h = '';
+    c.items.forEach(function(i){
+      h += '<div class="sline"><div class="l"><div class="pname"></div><div class="sub"></div></div><div class="price"></div></div>';
+    });
+    $('summary').innerHTML = h;
+    var rows = $('summary').querySelectorAll('.sline');
+    c.items.forEach(function(i,k){
+      rows[k].querySelector('.pname').textContent = i.name;
+      rows[k].querySelector('.sub').textContent = i.qty + ' x ' + money.format(i.price) + (i.size ? ' (' + i.size + ')' : '');
+      rows[k].querySelector('.price').textContent = money.format(i.price*i.qty);
+    });
+    totals(); setStep(2);
+  };
+  $('backShop').onclick = function(){ setStep(1); };
 
   function check(){
-    var need = [['name','your name'],['street','your street address'],['city','your city'],['state','your state'],['zip','your ZIP code']];
+    var need = [['name','your name'],['phone','your phone number'],['street','your street address'],['city','your city'],['state','your state'],['zip','your ZIP code']];
     for(var i=0;i<need.length;i++){ if(!val(need[i][0])) return 'Please enter ' + need[i][1] + '.'; }
     return '';
   }
-  $('go').onclick = function(){
+  $('place').onclick = function(){
     $('err').hidden = true;
     var msg = check(); if(msg){ $('err').textContent = msg; $('err').hidden = false; return; }
     var c = calc(); if(!c.count) return;
-    var id = previewId;
-    var text = orderText(c, id);
-    var phone = String(settings.order_phone||'').replace(/[^0-9+]/g,'');
-    $('go').disabled = true;
+    var id = orderId, text = orderText(c, id);
+    $('place').disabled = true; $('place').textContent = 'Placing order...';
     sb.from('orders').insert({
       id:id, rep:rep, customer_name:val('name'), street:val('street'), apt:val('apt'), city:val('city'),
-      state:val('state'), zip:val('zip'), notes:val('notes'), items:c.items, subtotal:c.sub, shipping:c.fee, total:c.total
+      state:val('state'), zip:val('zip'), notes:(val('phone') ? 'Phone: ' + val('phone') + (val('notes') ? '\n' : '') : '') + val('notes'),
+      items:c.items, subtotal:c.sub, shipping:c.fee, total:c.total
     }).then(function(r){
-      if(r.error){ $('err').textContent = 'Your order could not be saved here, but your text will still open.'; $('err').hidden = false; }
-      previewId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
-      location.href = 'sms:' + phone + '?&body=' + encodeURIComponent(text);
-      setTimeout(function(){ $('go').disabled = false; }, 1500);
+      showDone(c, id, text, !!r.error);
+      $('place').disabled = false; $('place').textContent = 'Place order';
     });
   };
-  $('copy').onclick = function(){
-    var msg = check(); if(msg){ $('err').textContent = msg; $('err').hidden = false; return; }
-    var c = calc(); if(!c.count) return;
-    var text = orderText(c, previewId);
-    if(navigator.clipboard){ navigator.clipboard.writeText(text).then(function(){ $('copy').textContent = 'Copied'; setTimeout(function(){ $('copy').textContent = 'Copy order instead'; },2000); }); }
+
+  function showDone(c, id, text, failed){
+    $('ordno').textContent = id.slice(0,8).toUpperCase();
+    $('dueAmt').textContent = money.format(c.total);
+    $('doneText').textContent = text;
+    $('saveErr').hidden = !failed;
+    if(failed) $('saveErr').textContent = 'Your order could not be saved on this page. Please send it to us with the button below so we have it.';
+    if(settings.payment_note){ $('payNote').hidden = false; $('payNote').textContent = settings.payment_note; $('payStep').textContent = 'Pay ' + money.format(c.total) + ' using the instructions below.'; }
+    else { $('payNote').hidden = true; $('payStep').textContent = 'We will contact you about payment.'; }
+    var phone = String(settings.order_phone||'').replace(/[^0-9+]/g,'');
+    if(isMobile && phone){
+      $('smsBtn').hidden = false; $('smsBtn').href = 'sms:' + phone + '?&body=' + encodeURIComponent(text);
+      $('copyBtn').textContent = 'Copy order instead';
+    } else { $('smsBtn').hidden = true; $('copyBtn').textContent = 'Copy order to send'; }
+    $('copyHint').textContent = phone ? 'Copy your order, then send it to ' + settings.order_phone + ' by text, WhatsApp or email.' : 'Copy your order, then paste it into a text, email or chat to us.';
+    setStep(3);
+  }
+  $('copyBtn').onclick = function(){
+    var t = $('doneText').textContent;
+    function ok(){ $('copyBtn').textContent = 'Copied'; setTimeout(function(){ $('copyBtn').textContent = isMobile ? 'Copy order instead' : 'Copy order to send'; },2000); }
+    if(navigator.clipboard){ navigator.clipboard.writeText(t).then(ok); }
+    else { var r = document.createRange(); r.selectNodeContents($('doneText')); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); try{ document.execCommand('copy'); ok(); }catch(e){} }
+  };
+  $('again').onclick = function(){
+    qty = {}; orderId = newId();
+    ['name','phone','street','apt','city','state','zip','notes'].forEach(function(id){ $(id).value=''; });
+    render(); setStep(1);
   };
   load();
 })();
