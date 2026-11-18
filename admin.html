@@ -32,6 +32,8 @@ th{border-bottom:2px solid #111;background:#fafafa}
 .login{max-width:400px;margin:70px auto;background:#fff;border:1px solid #ddd;border-radius:16px;padding:28px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
 .login h1{margin-top:0}
 .items{margin:6px 0 0;padding-left:18px}
+.thumb{width:72px;height:72px;border:1px solid #ccc;border-radius:8px;overflow:hidden;background:#eee;display:flex;align-items:center;justify-content:center;font-size:.8rem}
+.thumb img{width:100%;height:100%;object-fit:cover}
 </style>
 </head>
 <body>
@@ -108,6 +110,32 @@ th{border-bottom:2px solid #111;background:#fafafa}
   }
 
 
+
+  /* PHOTOS */
+  function resizeImage(file,max){
+    return new Promise(function(res,rej){
+      var img=new Image(), u=URL.createObjectURL(file);
+      img.onload=function(){
+        var r=Math.min(1,max/Math.max(img.width,img.height));
+        var c=document.createElement('canvas'); c.width=Math.round(img.width*r); c.height=Math.round(img.height*r);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        URL.revokeObjectURL(u);
+        c.toBlob(function(b){ b?res(b):rej(new Error('resize')); },'image/jpeg',0.85);
+      };
+      img.onerror=function(){ rej(new Error('That file is not an image.')); };
+      img.src=u;
+    });
+  }
+  function uploadPhoto(file){
+    return resizeImage(file,900).then(function(blob){
+      var path='p/'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.jpg';
+      return sb.storage.from('product-photos').upload(path,blob,{contentType:'image/jpeg',upsert:false}).then(function(r){
+        if(r.error) throw r.error;
+        return sb.storage.from('product-photos').getPublicUrl(path).data.publicUrl;
+      });
+    });
+  }
+
   /* CSV IMPORT */
   function parseCSV(text,delim){
     delim=delim||',';
@@ -132,13 +160,15 @@ th{border-bottom:2px solid #111;background:#fafafa}
     return best;
   }
   function csvUI(){
-    var FIELDS=[['name','Name'],['size','Size'],['category','Category'],['price','Price'],['lot_number','Lot number'],['sort','Sort order']];
+    var FIELDS=[['name','Name'],['size','Size'],['category','Category'],['price','Price'],['lot_number','Lot number'],['sort','Sort order'],['image_url','Photo link'],['description','Description']];
     var ALIAS={name:['name','product','product_name','item','item_name','title','product_title','description'],
       size:['size','sizes','volume','amount','strength','unit'],
       category:['category','cat','type','group','collection','product_type'],
       price:['price','cost','amount_usd','retail','retail_price','unit_price','msrp','prices'],
       lot_number:['lot_number','lot','lot_no','lot_','lot_num','batch','batch_number'],
-      sort:['sort','sort_order','order','position']};
+      sort:['sort','sort_order','order','position'],
+      description:['description','desc','details','about','summary'],
+      image_url:['image_url','image','photo','photo_url','picture','img']};
     function norm(h){ return String(h).trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
     $('tplBtn').onclick=function(){
       var t='name,size,category,price,lot_number,sort\r\nExample Item,10 mL,General,25.00,,0\r\n';
@@ -183,7 +213,7 @@ th{border-bottom:2px solid #111;background:#fafafa}
             var name=g('name'); if(!name){ bad++; return; }
             var price=Number(g('price').replace(/[$,\s]/g,''));
             items.push({name:name,size:g('size'),category:g('category')||'General',
-              price:isFinite(price)?price:0,lot_number:g('lot_number'),sort:Number(g('sort'))||0,active:true});
+              price:isFinite(price)?price:0,lot_number:g('lot_number'),sort:Number(g('sort'))||0,image_url:g('image_url'),description:g('description'),active:true});
           });
           if(items.length>500){ box.innerHTML='<div class="msg err">Too many rows. The limit is 500 per file.</div>'; return; }
           if(!items.length){ box.innerHTML='<div class="msg err">No rows have a value in the name column.</div>'; return; }
@@ -221,7 +251,9 @@ th{border-bottom:2px solid #111;background:#fafafa}
       '<div><label>Category</label><input id="n_cat" value="General"></div>'+
       '<div><label>Price</label><input id="n_price" type="number" step="0.01" min="0"></div>'+
       '<div><label>Lot number</label><input id="n_lot"></div>'+
-      '<div><label>Sort order</label><input id="n_sort" type="number" value="0"></div></div>'+
+      '<div><label>Sort order</label><input id="n_sort" type="number" value="0"></div>'+
+      '<div><label>Photo</label><input id="n_img" type="file" accept="image/*"></div></div>'+
+      '<label>Description</label><textarea id="n_desc" rows="3"></textarea>'+
       '<p><button class="btn" id="addBtn">Add product</button></p></div>'+
       '<h2>Import from CSV</h2><div class="card">'+
       '<p class="muted" style="margin-top:0">One product per row. First row must be column names: name, size, category, price, lot_number, sort. Only name is required. Imported products are added to the list. Nothing is replaced or deleted.</p>'+
@@ -232,9 +264,15 @@ th{border-bottom:2px solid #111;background:#fafafa}
     csvUI();
     $('addBtn').onclick=function(){
       var name=$('n_name').value.trim(); if(!name){ flash('Enter a product name.',true); return; }
-      sb.from('products').insert({name:name,size:$('n_size').value.trim(),category:$('n_cat').value.trim()||'General',
-        price:Number($('n_price').value)||0,lot_number:$('n_lot').value.trim(),sort:Number($('n_sort').value)||0,active:true})
-      .then(function(r){ if(r.error){ flash('Could not add: '+r.error.message,true); return; } flash('Product added.'); products(); });
+      var file=$('n_img').files[0];
+      $('addBtn').disabled=true;
+      (file?uploadPhoto(file):Promise.resolve('')).then(function(url){
+        return sb.from('products').insert({name:name,size:$('n_size').value.trim(),category:$('n_cat').value.trim()||'General',
+          price:Number($('n_price').value)||0,lot_number:$('n_lot').value.trim(),sort:Number($('n_sort').value)||0,image_url:url,description:$('n_desc').value.trim(),active:true});
+      }).then(function(r){
+        if(r.error){ flash('Could not add: '+r.error.message,true); $('addBtn').disabled=false; return; }
+        flash('Product added.'); products();
+      }).catch(function(e){ flash('Photo upload failed: '+(e.message||e),true); $('addBtn').disabled=false; });
     };
     sb.from('products').select('*').order('category').order('sort').order('name').then(function(r){
       var box=$('plist');
@@ -250,8 +288,18 @@ th{border-bottom:2px solid #111;background:#fafafa}
           '<div><label>Price</label><input data-f="price" type="number" step="0.01" min="0" value="'+esc(p.price)+'"></div>'+
           '<div><label>Lot number</label><input data-f="lot_number" value="'+esc(p.lot_number)+'"></div>'+
           '<div><label>Sort order</label><input data-f="sort" type="number" value="'+esc(p.sort)+'"></div>'+
+          '<div><label>Photo</label><div class="thumb">'+(p.image_url?'<img src="'+esc(p.image_url)+'" alt="">':'<span class="muted">None</span>')+'</div><input type="file" accept="image/*" data-up="1" style="margin-top:6px"><input type="hidden" data-f="image_url" value="'+esc(p.image_url||'')+'"></div>'+
           '<div><label>Shown on page</label><select data-f="active"><option value="true"'+(p.active?' selected':'')+'>Yes</option><option value="false"'+(!p.active?' selected':'')+'>No (hidden)</option></select></div>'+
-          '</div><p style="margin:10px 0 0"><button class="btn sm" data-a="save">Save</button> <button class="btn alt sm" data-a="del">Delete</button></p>';
+          '</div><label>Description</label><textarea data-f="description" rows="3">'+esc(p.description||'')+'</textarea><p style="margin:10px 0 0"><button class="btn sm" data-a="save">Save</button> <button class="btn alt sm" data-a="del">Delete</button></p>';
+        d.querySelector('[data-up]').onchange=function(){
+          var f=this.files[0]; if(!f) return;
+          flash('Uploading photo...');
+          uploadPhoto(f).then(function(url){
+            d.querySelector('[data-f=image_url]').value=url;
+            d.querySelector('.thumb').innerHTML='<img src="'+esc(url)+'" alt="">';
+            flash('Photo ready. Click Save to keep it.');
+          }).catch(function(e){ flash('Photo upload failed: '+(e.message||e),true); });
+        };
         d.querySelector('[data-a=save]').onclick=function(){
           var u={}; d.querySelectorAll('[data-f]').forEach(function(el){
             var f=el.getAttribute('data-f'), v=el.value;

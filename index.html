@@ -18,7 +18,15 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Hel
 .chip.on{background:#111;color:#fff}
 .cat{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;margin:28px 0 10px;font-weight:700;display:flex;align-items:center;gap:12px}
 .cat:after{content:"";flex:1;height:1px;background:#bbb}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;background:#fff;border:1px solid #ddd;border-radius:12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.card{background:#fff;border:1px solid #ddd;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.photo{aspect-ratio:1/1;background:#e9e9e9;display:flex;align-items:center;justify-content:center;color:#888;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.cbody{padding:14px;display:flex;flex-direction:column;gap:6px;flex:1}
+.pdesc{color:#444;font-size:.9rem;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+.pdesc.open{display:block;-webkit-line-clamp:unset}
+.more{background:none;border:0;padding:0;color:#111;font-weight:700;font-size:.85rem;text-decoration:underline;cursor:pointer;align-self:flex-start}
+.cfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:8px}
 .pname{font-weight:700;font-size:1.02rem}
 .psize{color:#555;font-size:.9rem}
 .price{font-weight:700;white-space:nowrap;font-size:1.05rem}
@@ -130,27 +138,39 @@ pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:
     var list = $('list'); list.innerHTML = '';
     if(!products.length){ list.innerHTML = '<div class="empty">No products are listed yet.</div>'; $('panel').hidden = true; return; }
     var shown = products.filter(function(p){ return cat==='All' || p.category===cat; });
-    var last = null;
+    var last = null, grid = null;
     shown.forEach(function(p){
       if(p.category !== last){
-        var h = document.createElement('div'); h.className='cat'; h.textContent = p.category; list.appendChild(h); last = p.category;
+        var h = document.createElement('div'); h.className='cat'; h.textContent = p.category; list.appendChild(h); last = p.category; grid = null;
       }
-      var row = document.createElement('div'); row.className='row';
-      var left = document.createElement('div');
+      if(!grid){ grid = document.createElement('div'); grid.className='pgrid'; list.appendChild(grid); }
+      var card = document.createElement('div'); card.className='card';
+      var ph = document.createElement('div'); ph.className='photo';
+      if(p.image_url){ var im = document.createElement('img'); im.src = p.image_url; im.alt = p.name; im.loading='lazy'; im.onerror=function(){ ph.textContent='No photo'; }; ph.appendChild(im); }
+      else ph.textContent = 'No photo';
+      var body = document.createElement('div'); body.className='cbody';
       var n = document.createElement('div'); n.className='pname'; n.textContent = p.name;
-      var s = document.createElement('div'); s.className='psize'; s.textContent = p.size;
-      left.appendChild(n); if(p.size) left.appendChild(s);
-      var right = document.createElement('div'); right.style.display='flex'; right.style.alignItems='center'; right.style.gap='14px';
+      var sz = document.createElement('div'); sz.className='psize'; sz.textContent = p.size || '';
       var pr = document.createElement('div'); pr.className='price'; pr.textContent = money.format(Number(p.price));
+      var foot = document.createElement('div'); foot.className='cfoot';
+      var desc = null, more = null;
+      if(p.description){
+        desc = document.createElement('div'); desc.className='pdesc'; desc.textContent = p.description;
+        if(p.description.length > 110){
+          more = document.createElement('button'); more.className='more'; more.type='button'; more.textContent='Read more';
+          more.onclick = function(){ var o = desc.classList.toggle('open'); more.textContent = o ? 'Show less' : 'Read more'; };
+        }
+      }
       var q = document.createElement('div'); q.className='qty';
-      var minus = document.createElement('button'); minus.textContent = '−'; minus.setAttribute('aria-label','Remove one');
+      var minus = document.createElement('button'); minus.textContent = '\u2212'; minus.setAttribute('aria-label','Remove one');
       var num = document.createElement('span'); num.textContent = qty[p.id]||0;
       var plus = document.createElement('button'); plus.textContent = '+'; plus.setAttribute('aria-label','Add one');
       minus.onclick = function(){ qty[p.id] = Math.max(0,(qty[p.id]||0)-1); num.textContent = qty[p.id]; totals(); };
       plus.onclick = function(){ qty[p.id] = Math.min(99,(qty[p.id]||0)+1); num.textContent = qty[p.id]; totals(); };
       q.appendChild(minus); q.appendChild(num); q.appendChild(plus);
-      right.appendChild(pr); right.appendChild(q);
-      row.appendChild(left); row.appendChild(right); list.appendChild(row);
+      foot.appendChild(pr); foot.appendChild(q);
+      body.appendChild(n); if(p.size) body.appendChild(sz); if(desc) body.appendChild(desc); if(more) body.appendChild(more); body.appendChild(foot);
+      card.appendChild(ph); card.appendChild(body); grid.appendChild(card);
     });
     $('panel').hidden = false;
     totals();
