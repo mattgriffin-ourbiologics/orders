@@ -107,6 +107,73 @@ th{border-bottom:2px solid #111;background:#fafafa}
     if(tab==='Products') products(); else if(tab==='Orders') orders(); else if(tab==='Reps') reps(); else settings();
   }
 
+
+  /* CSV IMPORT */
+  function parseCSV(text){
+    text=text.replace(/^\uFEFF/,'');
+    var rows=[],row=[],cur='',q=false,i=0,c;
+    for(;i<text.length;i++){
+      c=text[i];
+      if(q){
+        if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c;
+      } else if(c==='"'){ q=true; }
+      else if(c===','){ row.push(cur);cur=''; }
+      else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(cur);cur=''; rows.push(row);row=[]; }
+      else cur+=c;
+    }
+    if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+    return rows.filter(function(r){ return r.some(function(x){return String(x).trim()!=='';}); });
+  }
+  function csvUI(){
+    $('tplBtn').onclick=function(){
+      var t='name,size,category,price,lot_number,sort\r\nExample Item,10 mL,General,25.00,,0\r\n';
+      var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'})); a.download='products-template.csv'; document.body.appendChild(a); a.click(); a.remove();
+    };
+    $('csvFile').onchange=function(){
+      var f=this.files[0], out=$('csvOut'); out.innerHTML='';
+      if(!f) return;
+      var rd=new FileReader();
+      rd.onload=function(){
+        var rows=parseCSV(String(rd.result));
+        if(rows.length<2){ out.innerHTML='<div class="msg err">No product rows found. Use the template.</div>'; return; }
+        var head=rows[0].map(function(h){return h.trim().toLowerCase().replace(/[\s-]+/g,'_');});
+        var alias={product:'name',product_name:'name',item:'name',cat:'category',lot:'lot_number',lot_no:'lot_number',order:'sort'};
+        head=head.map(function(h){return alias[h]||h;});
+        if(head.indexOf('name')<0){ out.innerHTML='<div class="msg err">The first row needs a column called name.</div>'; return; }
+        var items=[],bad=0;
+        rows.slice(1).forEach(function(r){
+          var o={}; head.forEach(function(h,i){ o[h]=(r[i]||'').trim(); });
+          if(!o.name){ bad++; return; }
+          var price=Number(String(o.price||'').replace(/[$,]/g,''));
+          items.push({name:o.name,size:o.size||'',category:o.category||'General',
+            price:isFinite(price)?price:0,lot_number:o.lot_number||'',sort:Number(o.sort)||0,active:true});
+        });
+        if(items.length>500){ out.innerHTML='<div class="msg err">Too many rows. Limit is 500 per file.</div>'; return; }
+        if(!items.length){ out.innerHTML='<div class="msg err">No rows with a name.</div>'; return; }
+        var h='<p><strong>'+items.length+' product'+(items.length===1?'':'s')+' ready.</strong>'+(bad?' '+bad+' row'+(bad===1?'':'s')+' skipped (no name).':'')+' Check the preview, then import.</p>'+
+          '<table><tr><th>Name</th><th>Size</th><th>Category</th><th>Price</th><th>Lot</th><th>Sort</th></tr>';
+        items.slice(0,10).forEach(function(p){ h+='<tr><td>'+esc(p.name)+'</td><td>'+esc(p.size)+'</td><td>'+esc(p.category)+'</td><td>'+esc(money.format(p.price))+'</td><td>'+esc(p.lot_number)+'</td><td>'+esc(p.sort)+'</td></tr>'; });
+        h+='</table>'+(items.length>10?'<p class="muted">Showing the first 10 of '+items.length+'.</p>':'')+
+          '<p><button class="btn" id="csvGo">Import '+items.length+' product'+(items.length===1?'':'s')+'</button></p>';
+        out.innerHTML=h;
+        $('csvGo').onclick=function(){
+          var btn=this; btn.disabled=true; btn.textContent='Importing...';
+          var chunks=[]; for(var i=0;i<items.length;i+=100) chunks.push(items.slice(i,i+100));
+          var done=0;
+          (function next(){
+            if(!chunks.length){ flash(done+' products imported.'); products(); return; }
+            var ch=chunks.shift();
+            sb.from('products').insert(ch).then(function(r){
+              if(r.error){ flash('Stopped after '+done+' products: '+r.error.message,true); products(); return; }
+              done+=ch.length; next();
+            });
+          })();
+        };
+      };
+      rd.readAsText(f);
+    };
+  }
+
   /* PRODUCTS */
   function products(){
     var pane=$('pane');
@@ -118,7 +185,13 @@ th{border-bottom:2px solid #111;background:#fafafa}
       '<div><label>Lot number</label><input id="n_lot"></div>'+
       '<div><label>Sort order</label><input id="n_sort" type="number" value="0"></div></div>'+
       '<p><button class="btn" id="addBtn">Add product</button></p></div>'+
+      '<h2>Import from CSV</h2><div class="card">'+
+      '<p class="muted" style="margin-top:0">One product per row. First row must be column names: name, size, category, price, lot_number, sort. Only name is required. Imported products are added to the list. Nothing is replaced or deleted.</p>'+
+      '<p><button class="btn alt sm" id="tplBtn" type="button">Download CSV template</button></p>'+
+      '<input type="file" id="csvFile" accept=".csv,text/csv">'+
+      '<div id="csvOut" style="margin-top:12px"></div></div>'+
       '<h2>Products</h2><div id="plist">Loading...</div>';
+    csvUI();
     $('addBtn').onclick=function(){
       var name=$('n_name').value.trim(); if(!name){ flash('Enter a product name.',true); return; }
       sb.from('products').insert({name:name,size:$('n_size').value.trim(),category:$('n_cat').value.trim()||'General',
