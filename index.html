@@ -7,45 +7,55 @@
 <title>Order Portal</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#000;line-height:1.45}
-.wrap{max-width:720px;margin:0 auto;padding:20px 16px 80px}
-h1{font-size:1.6rem;margin:8px 0 4px}
-.sub{color:#444;margin:0 0 16px}
-.chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.chip{border:1px solid #000;background:#fff;color:#000;border-radius:999px;padding:7px 14px;font-size:.9rem;cursor:pointer}
-.chip.on{background:#000;color:#fff}
-.cat{font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;margin:22px 0 6px;border-bottom:2px solid #000;padding-bottom:4px}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #ddd}
-.pname{font-weight:600}
-.psize{color:#444;font-size:.9rem}
-.price{font-weight:600;white-space:nowrap}
-.qty{display:flex;align-items:center;gap:6px}
-.qty button{width:36px;height:36px;border:1px solid #000;background:#fff;font-size:1.2rem;border-radius:8px;cursor:pointer}
-.qty span{min-width:24px;text-align:center;font-weight:600}
-.panel{border:2px solid #000;border-radius:12px;padding:16px;margin-top:28px}
-.line{display:flex;justify-content:space-between;padding:4px 0}
-.total{font-size:1.2rem;font-weight:700;border-top:1px solid #000;margin-top:8px;padding-top:8px}
-label{display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;margin:14px 0 4px}
-input,textarea{width:100%;font-size:1rem;padding:12px;border:1px solid #000;border-radius:8px;background:#fff;color:#000;font-family:inherit}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f3f3f3;color:#111;line-height:1.5}
+.hero{background:#000;color:#fff;padding:44px 16px 40px;text-align:center}
+.hero h1{font-size:2rem;letter-spacing:.02em;margin:0 0 10px;font-weight:800}
+.hero .sub{color:#ccc;margin:0 auto;max-width:520px;font-size:1.02rem}
+.hero .rule{width:48px;height:3px;background:#fff;margin:16px auto 0}
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px 90px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px;justify-content:center}
+.chip{border:1px solid #111;background:#fff;color:#111;border-radius:999px;padding:8px 18px;font-size:.9rem;cursor:pointer;font-weight:600}
+.chip.on{background:#111;color:#fff}
+.cat{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;margin:28px 0 10px;font-weight:700;display:flex;align-items:center;gap:12px}
+.cat:after{content:"";flex:1;height:1px;background:#bbb}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;background:#fff;border:1px solid #ddd;border-radius:12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.pname{font-weight:700;font-size:1.02rem}
+.psize{color:#555;font-size:.9rem}
+.price{font-weight:700;white-space:nowrap;font-size:1.05rem}
+.qty{display:flex;align-items:center;gap:8px;background:#f3f3f3;border-radius:999px;padding:3px}
+.qty button{width:34px;height:34px;border:0;background:#111;color:#fff;font-size:1.2rem;border-radius:50%;cursor:pointer;line-height:1}
+.qty span{min-width:24px;text-align:center;font-weight:700}
+.panel{background:#fff;border:1px solid #ddd;border-radius:16px;padding:22px;margin-top:30px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.panel h2{font-size:1.1rem;margin:0 0 10px}
+.line{display:flex;justify-content:space-between;padding:5px 0;color:#333}
+.total{font-size:1.25rem;font-weight:800;border-top:2px solid #111;margin-top:10px;padding-top:10px;color:#111}
+label{display:block;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;margin:16px 0 5px;font-weight:700}
+input,textarea{width:100%;font-size:1rem;padding:13px;border:1px solid #999;border-radius:10px;background:#fff;color:#111;font-family:inherit}
+input:focus,textarea:focus{outline:2px solid #111;border-color:#111}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.pay{border:1px solid #000;border-radius:8px;padding:12px;margin-top:14px;background:#f4f4f4;white-space:pre-wrap}
-.go{width:100%;margin-top:18px;padding:16px;font-size:1.05rem;font-weight:700;background:#000;color:#fff;border:0;border-radius:10px;cursor:pointer}
-.go[disabled]{opacity:.4;cursor:not-allowed}
-.ghost{width:100%;margin-top:10px;padding:12px;background:#fff;color:#000;border:1px solid #000;border-radius:10px;cursor:pointer;font-size:.95rem}
-.small{font-size:.85rem;color:#444;margin-top:8px;text-align:center}
+.pay{border:1px dashed #111;border-radius:10px;padding:14px;margin:16px 0 6px;background:#f7f7f7;white-space:pre-wrap}
+.go{width:100%;margin-top:20px;padding:17px;font-size:1.05rem;font-weight:800;background:#000;color:#fff;border:0;border-radius:12px;cursor:pointer;letter-spacing:.02em}
+.go[disabled]{opacity:.35;cursor:not-allowed}
+.ghost{width:100%;margin-top:10px;padding:13px;background:#fff;color:#111;border:1px solid #111;border-radius:12px;cursor:pointer;font-size:.95rem;font-weight:600}
+.small{font-size:.85rem;color:#555;margin-top:10px;text-align:center}
 .err{color:#b00020;font-weight:600;margin-top:10px}
-pre{white-space:pre-wrap;background:#f4f4f4;border:1px solid #ccc;border-radius:8px;padding:12px;font-size:.85rem}
-.empty{padding:28px 0;color:#444;text-align:center}
+pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;border-radius:10px;padding:12px;font-size:.85rem}
+.empty{padding:48px 20px;color:#555;text-align:center;background:#fff;border:1px dashed #aaa;border-radius:14px}
+@media(max-width:520px){.hero h1{font-size:1.6rem}.row{padding:14px}}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="hero">
   <h1 id="title">Order Portal</h1>
   <p class="sub">Choose your items and quantities, then send your order by text.</p>
+  <div class="rule"></div>
+</div>
+<div class="wrap">
   <div class="chips" id="chips"></div>
   <div id="list"><div class="empty">Loading...</div></div>
 
   <div class="panel" id="panel" hidden>
+    <h2>Your order</h2>
     <div class="line"><span>Items</span><span id="count">0</span></div>
     <div class="line"><span>Subtotal</span><span id="sub">$0.00</span></div>
     <div class="line"><span>Shipping</span><span id="ship">$0.00</span></div>
