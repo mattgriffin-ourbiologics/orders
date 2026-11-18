@@ -109,7 +109,8 @@ th{border-bottom:2px solid #111;background:#fafafa}
 
 
   /* CSV IMPORT */
-  function parseCSV(text){
+  function parseCSV(text,delim){
+    delim=delim||',';
     text=text.replace(/^\uFEFF/,'');
     var rows=[],row=[],cur='',q=false,i=0,c;
     for(;i<text.length;i++){
@@ -117,14 +118,28 @@ th{border-bottom:2px solid #111;background:#fafafa}
       if(q){
         if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c;
       } else if(c==='"'){ q=true; }
-      else if(c===','){ row.push(cur);cur=''; }
+      else if(c===delim){ row.push(cur);cur=''; }
       else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(cur);cur=''; rows.push(row);row=[]; }
       else cur+=c;
     }
     if(cur!==''||row.length){ row.push(cur); rows.push(row); }
     return rows.filter(function(r){ return r.some(function(x){return String(x).trim()!=='';}); });
   }
+  function detectDelim(text){
+    var first=text.replace(/^\uFEFF/,'').split(/\r?\n/)[0]||'';
+    var best=',',n=0;
+    [',',';','\t','|'].forEach(function(d){ var c=first.split(d).length-1; if(c>n){n=c;best=d;} });
+    return best;
+  }
   function csvUI(){
+    var FIELDS=[['name','Name'],['size','Size'],['category','Category'],['price','Price'],['lot_number','Lot number'],['sort','Sort order']];
+    var ALIAS={name:['name','product','product_name','item','item_name','title','product_title','description'],
+      size:['size','sizes','volume','amount','strength','unit'],
+      category:['category','cat','type','group','collection','product_type'],
+      price:['price','cost','amount_usd','retail','retail_price','unit_price','msrp','prices'],
+      lot_number:['lot_number','lot','lot_no','lot_','lot_num','batch','batch_number'],
+      sort:['sort','sort_order','order','position']};
+    function norm(h){ return String(h).trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
     $('tplBtn').onclick=function(){
       var t='name,size,category,price,lot_number,sort\r\nExample Item,10 mL,General,25.00,,0\r\n';
       var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'})); a.download='products-template.csv'; document.body.appendChild(a); a.click(); a.remove();
@@ -134,41 +149,64 @@ th{border-bottom:2px solid #111;background:#fafafa}
       if(!f) return;
       var rd=new FileReader();
       rd.onload=function(){
-        var rows=parseCSV(String(rd.result));
-        if(rows.length<2){ out.innerHTML='<div class="msg err">No product rows found. Use the template.</div>'; return; }
-        var head=rows[0].map(function(h){return h.trim().toLowerCase().replace(/[\s-]+/g,'_');});
-        var alias={product:'name',product_name:'name',item:'name',cat:'category',lot:'lot_number',lot_no:'lot_number',order:'sort'};
-        head=head.map(function(h){return alias[h]||h;});
-        if(head.indexOf('name')<0){ out.innerHTML='<div class="msg err">The first row needs a column called name.</div>'; return; }
-        var items=[],bad=0;
-        rows.slice(1).forEach(function(r){
-          var o={}; head.forEach(function(h,i){ o[h]=(r[i]||'').trim(); });
-          if(!o.name){ bad++; return; }
-          var price=Number(String(o.price||'').replace(/[$,]/g,''));
-          items.push({name:o.name,size:o.size||'',category:o.category||'General',
-            price:isFinite(price)?price:0,lot_number:o.lot_number||'',sort:Number(o.sort)||0,active:true});
+        var text=String(rd.result), delim=detectDelim(text);
+        var rows=parseCSV(text,delim);
+        if(rows.length<2){ out.innerHTML='<div class="msg err">No product rows found. The file needs a first row of column names and at least one product row.</div>'; return; }
+        var heads=rows[0].map(function(h){return String(h).trim();});
+        var map={};
+        FIELDS.forEach(function(F){
+          var key=F[0], idx=-1;
+          for(var i=0;i<heads.length&&idx<0;i++){ if(ALIAS[key].indexOf(norm(heads[i]))>=0) idx=i; }
+          map[key]=idx;
         });
-        if(items.length>500){ out.innerHTML='<div class="msg err">Too many rows. Limit is 500 per file.</div>'; return; }
-        if(!items.length){ out.innerHTML='<div class="msg err">No rows with a name.</div>'; return; }
-        var h='<p><strong>'+items.length+' product'+(items.length===1?'':'s')+' ready.</strong>'+(bad?' '+bad+' row'+(bad===1?'':'s')+' skipped (no name).':'')+' Check the preview, then import.</p>'+
-          '<table><tr><th>Name</th><th>Size</th><th>Category</th><th>Price</th><th>Lot</th><th>Sort</th></tr>';
-        items.slice(0,10).forEach(function(p){ h+='<tr><td>'+esc(p.name)+'</td><td>'+esc(p.size)+'</td><td>'+esc(p.category)+'</td><td>'+esc(money.format(p.price))+'</td><td>'+esc(p.lot_number)+'</td><td>'+esc(p.sort)+'</td></tr>'; });
-        h+='</table>'+(items.length>10?'<p class="muted">Showing the first 10 of '+items.length+'.</p>':'')+
-          '<p><button class="btn" id="csvGo">Import '+items.length+' product'+(items.length===1?'':'s')+'</button></p>';
-        out.innerHTML=h;
-        $('csvGo').onclick=function(){
-          var btn=this; btn.disabled=true; btn.textContent='Importing...';
-          var chunks=[]; for(var i=0;i<items.length;i+=100) chunks.push(items.slice(i,i+100));
-          var done=0;
-          (function next(){
-            if(!chunks.length){ flash(done+' products imported.'); products(); return; }
-            var ch=chunks.shift();
-            sb.from('products').insert(ch).then(function(r){
-              if(r.error){ flash('Stopped after '+done+' products: '+r.error.message,true); products(); return; }
-              done+=ch.length; next();
-            });
-          })();
-        };
+        draw();
+        function draw(){
+          var h='<p class="muted" style="margin:0 0 8px">Match your file columns to the product fields. Fix any that are wrong.</p><div class="grid">';
+          FIELDS.forEach(function(F){
+            h+='<div><label>'+F[1]+(F[0]==='name'?' (required)':'')+'</label><select data-m="'+F[0]+'"><option value="-1">(none)</option>';
+            heads.forEach(function(x,i){ h+='<option value="'+i+'"'+(map[F[0]]===i?' selected':'')+'>'+esc(x||('Column '+(i+1)))+'</option>'; });
+            h+='</select></div>';
+          });
+          h+='</div><div id="csvPrev" style="margin-top:12px"></div>';
+          out.innerHTML=h;
+          out.querySelectorAll('[data-m]').forEach(function(el){
+            el.onchange=function(){ map[el.getAttribute('data-m')]=Number(el.value); preview(); };
+          });
+          preview();
+        }
+        function preview(){
+          var box=$('csvPrev');
+          if(map.name<0){ box.innerHTML='<div class="msg err">Choose which column holds the product name.</div>'; return; }
+          var items=[],bad=0;
+          rows.slice(1).forEach(function(r){
+            function g(k){ return map[k]>=0 ? String(r[map[k]]==null?'':r[map[k]]).trim() : ''; }
+            var name=g('name'); if(!name){ bad++; return; }
+            var price=Number(g('price').replace(/[$,\s]/g,''));
+            items.push({name:name,size:g('size'),category:g('category')||'General',
+              price:isFinite(price)?price:0,lot_number:g('lot_number'),sort:Number(g('sort'))||0,active:true});
+          });
+          if(items.length>500){ box.innerHTML='<div class="msg err">Too many rows. The limit is 500 per file.</div>'; return; }
+          if(!items.length){ box.innerHTML='<div class="msg err">No rows have a value in the name column.</div>'; return; }
+          var h='<p><strong>'+items.length+' product'+(items.length===1?'':'s')+' ready.</strong>'+(bad?' '+bad+' row'+(bad===1?'':'s')+' skipped (no name).':'')+' Check the preview, then import.</p>'+
+            '<table><tr><th>Name</th><th>Size</th><th>Category</th><th>Price</th><th>Lot</th><th>Sort</th></tr>';
+          items.slice(0,10).forEach(function(p){ h+='<tr><td>'+esc(p.name)+'</td><td>'+esc(p.size)+'</td><td>'+esc(p.category)+'</td><td>'+esc(money.format(p.price))+'</td><td>'+esc(p.lot_number)+'</td><td>'+esc(p.sort)+'</td></tr>'; });
+          h+='</table>'+(items.length>10?'<p class="muted">Showing the first 10 of '+items.length+'.</p>':'')+
+            '<p><button class="btn" id="csvGo">Import '+items.length+' product'+(items.length===1?'':'s')+'</button></p>';
+          box.innerHTML=h;
+          $('csvGo').onclick=function(){
+            var btn=this; btn.disabled=true; btn.textContent='Importing...';
+            var chunks=[]; for(var i=0;i<items.length;i+=100) chunks.push(items.slice(i,i+100));
+            var done=0;
+            (function next(){
+              if(!chunks.length){ flash(done+' products imported.'); products(); return; }
+              var ch=chunks.shift();
+              sb.from('products').insert(ch).then(function(r){
+                if(r.error){ flash('Stopped after '+done+' products: '+r.error.message,true); products(); return; }
+                done+=ch.length; next();
+              });
+            })();
+          };
+        }
       };
       rd.readAsText(f);
     };
