@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Order Portal Admin</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#000;line-height:1.45}
+.wrap{max-width:1000px;margin:0 auto;padding:20px 16px 80px}
+h1{font-size:1.5rem;margin:6px 0 14px}
+h2{font-size:1.1rem;margin:22px 0 8px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tab{border:1px solid #000;background:#fff;color:#000;border-radius:8px;padding:9px 16px;cursor:pointer;font-size:.95rem}
+.tab.on{background:#000;color:#fff}
+label{display:block;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px}
+input,select,textarea{width:100%;font-size:.95rem;padding:9px;border:1px solid #000;border-radius:6px;background:#fff;color:#000;font-family:inherit}
+button{font-family:inherit}
+.btn{background:#000;color:#fff;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;font-size:.95rem}
+.btn.alt{background:#fff;color:#000;border:1px solid #000}
+.btn.sm{padding:6px 10px;font-size:.85rem}
+.card{border:1px solid #000;border-radius:10px;padding:14px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.msg{margin:10px 0;font-weight:600}
+.err{color:#b00020}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:8px;border-bottom:1px solid #ccc;vertical-align:top}
+th{border-bottom:2px solid #000}
+.muted{color:#444}
+.login{max-width:380px;margin:60px auto}
+.items{margin:6px 0 0;padding-left:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div id="loginView" class="login" hidden>
+  <h1>Admin login</h1>
+  <label for="em">Email</label><input id="em" type="email" autocomplete="username">
+  <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
+  <div class="msg err" id="loginErr" hidden></div>
+  <p><button class="btn" id="loginBtn">Log in</button></p>
+</div>
+
+<div id="appView" hidden>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h1 id="adminTitle">Admin</h1>
+    <button class="btn alt sm" id="logout">Log out</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="msg" id="flash" hidden></div>
+  <div id="pane"></div>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+  var cfg = window.PORTAL_CONFIG || {};
+  var sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  var money = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+  var $ = function(id){return document.getElementById(id)};
+  var STATUSES = ['new','paid','shipped','done','canceled'];
+  var tab = 'Products';
+  var TABS = ['Products','Orders','Reps','Settings'];
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function flash(t,bad){ var f=$('flash'); f.textContent=t; f.className='msg'+(bad?' err':''); f.hidden=false; setTimeout(function(){f.hidden=true;},3500); }
+
+  function start(){
+    sb.auth.getSession().then(function(r){
+      if(r.data && r.data.session) enter(); else { $('loginView').hidden=false; $('appView').hidden=true; }
+    });
+  }
+  $('loginBtn').onclick = function(){
+    $('loginErr').hidden = true;
+    sb.auth.signInWithPassword({email:$('em').value.trim(), password:$('pw').value}).then(function(r){
+      if(r.error){ $('loginErr').textContent='Login failed. Check the email and password.'; $('loginErr').hidden=false; return; }
+      enter();
+    });
+  };
+  $('logout').onclick = function(){ sb.auth.signOut().then(function(){ location.reload(); }); };
+
+  function enter(){
+    // confirm this login is an admin: orders are readable only by admins
+    sb.from('orders').select('id',{head:true,count:'exact'}).then(function(r){
+      if(r.error){ sb.auth.signOut(); $('loginView').hidden=false; $('appView').hidden=true; $('loginErr').textContent='This login is not set up as an admin.'; $('loginErr').hidden=false; return; }
+      $('loginView').hidden=true; $('appView').hidden=false;
+      sb.from('settings').select('site_name').eq('id',1).maybeSingle().then(function(s){ if(s.data) $('adminTitle').textContent = s.data.site_name + ' Admin'; });
+      drawTabs(); show();
+    });
+  }
+  function drawTabs(){
+    $('tabs').innerHTML='';
+    TABS.forEach(function(t){
+      var b=document.createElement('button'); b.className='tab'+(t===tab?' on':''); b.textContent=t;
+      b.onclick=function(){ tab=t; drawTabs(); show(); };
+      $('tabs').appendChild(b);
+    });
+  }
+  function show(){
+    if(tab==='Products') products(); else if(tab==='Orders') orders(); else if(tab==='Reps') reps(); else settings();
+  }
+
+  /* PRODUCTS */
+  function products(){
+    var pane=$('pane');
+    pane.innerHTML='<h2>Add a product</h2><div class="card"><div class="grid">'+
+      '<div><label>Name</label><input id="n_name"></div>'+
+      '<div><label>Size</label><input id="n_size"></div>'+
+      '<div><label>Category</label><input id="n_cat" value="General"></div>'+
+      '<div><label>Price</label><input id="n_price" type="number" step="0.01" min="0"></div>'+
+      '<div><label>Lot number</label><input id="n_lot"></div>'+
+      '<div><label>Sort order</label><input id="n_sort" type="number" value="0"></div></div>'+
+      '<p><button class="btn" id="addBtn">Add product</button></p></div>'+
+      '<h2>Products</h2><div id="plist">Loading...</div>';
+    $('addBtn').onclick=function(){
+      var name=$('n_name').value.trim(); if(!name){ flash('Enter a product name.',true); return; }
+      sb.from('products').insert({name:name,size:$('n_size').value.trim(),category:$('n_cat').value.trim()||'General',
+        price:Number($('n_price').value)||0,lot_number:$('n_lot').value.trim(),sort:Number($('n_sort').value)||0,active:true})
+      .then(function(r){ if(r.error){ flash('Could not add: '+r.error.message,true); return; } flash('Product added.'); products(); });
+    };
+    sb.from('products').select('*').order('category').order('sort').order('name').then(function(r){
+      var box=$('plist');
+      if(r.error){ box.textContent='Could not load products.'; return; }
+      if(!r.data.length){ box.innerHTML='<p class="muted">No products yet. Add the first one above.</p>'; return; }
+      box.innerHTML='';
+      r.data.forEach(function(p){
+        var d=document.createElement('div'); d.className='card';
+        d.innerHTML='<div class="grid">'+
+          '<div><label>Name</label><input data-f="name" value="'+esc(p.name)+'"></div>'+
+          '<div><label>Size</label><input data-f="size" value="'+esc(p.size)+'"></div>'+
+          '<div><label>Category</label><input data-f="category" value="'+esc(p.category)+'"></div>'+
+          '<div><label>Price</label><input data-f="price" type="number" step="0.01" min="0" value="'+esc(p.price)+'"></div>'+
+          '<div><label>Lot number</label><input data-f="lot_number" value="'+esc(p.lot_number)+'"></div>'+
+          '<div><label>Sort order</label><input data-f="sort" type="number" value="'+esc(p.sort)+'"></div>'+
+          '<div><label>Shown on page</label><select data-f="active"><option value="true"'+(p.active?' selected':'')+'>Yes</option><option value="false"'+(!p.active?' selected':'')+'>No (hidden)</option></select></div>'+
+          '</div><p style="margin:10px 0 0"><button class="btn sm" data-a="save">Save</button> <button class="btn alt sm" data-a="del">Delete</button></p>';
+        d.querySelector('[data-a=save]').onclick=function(){
+          var u={}; d.querySelectorAll('[data-f]').forEach(function(el){
+            var f=el.getAttribute('data-f'), v=el.value;
+            if(f==='price'||f==='sort') v=Number(v)||0; else if(f==='active') v=(v==='true'); else v=v.trim();
+            u[f]=v; });
+          if(!u.name){ flash('Name cannot be empty.',true); return; }
+          sb.from('products').update(u).eq('id',p.id).then(function(x){ flash(x.error?'Could not save.':'Saved.',!!x.error); });
+        };
+        d.querySelector('[data-a=del]').onclick=function(){
+          if(!confirm('Delete '+p.name+'? Past orders keep their own copy of the item. To hide it instead, set Shown on page to No.')) return;
+          sb.from('products').delete().eq('id',p.id).then(function(x){ if(x.error){ flash('Could not delete.',true); return; } d.remove(); flash('Deleted.'); });
+        };
+        box.appendChild(d);
+      });
+    });
+  }
+
+  /* ORDERS */
+  function orders(){
+    var pane=$('pane');
+    pane.innerHTML='<h2>Orders</h2><div class="grid" style="max-width:520px"><div><label>Status</label><select id="fs"><option value="">All</option>'+
+      STATUSES.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select></div>'+
+      '<div><label>Rep</label><input id="fr" placeholder="rep tag"></div></div><div id="olist" style="margin-top:12px">Loading...</div>';
+    function load(){
+      var q=sb.from('orders').select('*').order('created_at',{ascending:false}).limit(300);
+      if($('fs').value) q=q.eq('status',$('fs').value);
+      if($('fr').value.trim()) q=q.eq('rep',$('fr').value.trim().toLowerCase());
+      q.then(function(r){
+        var box=$('olist');
+        if(r.error){ box.textContent='Could not load orders.'; return; }
+        if(!r.data.length){ box.innerHTML='<p class="muted">No orders yet.</p>'; return; }
+        box.innerHTML='';
+        r.data.forEach(function(o){
+          var d=document.createElement('div'); d.className='card';
+          var items=(o.items||[]).map(function(i){ return '<li>'+esc(i.qty)+' x '+esc(i.name)+(i.size?' ('+esc(i.size)+')':'')+(i.lot_number?' | lot '+esc(i.lot_number):'')+' = '+money.format(i.price*i.qty)+'</li>'; }).join('');
+          d.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><strong>'+esc(o.customer_name)+'</strong><span class="muted">'+esc(new Date(o.created_at).toLocaleString())+' | order '+esc(o.id.slice(0,8))+(o.rep?' | rep '+esc(o.rep):'')+'</span></div>'+
+            '<div class="muted">'+esc(o.street)+(o.apt?', '+esc(o.apt):'')+', '+esc(o.city)+', '+esc(o.state)+' '+esc(o.zip)+'</div>'+
+            '<ul class="items">'+items+'</ul>'+
+            '<div>Subtotal '+money.format(o.subtotal)+' | Shipping '+money.format(o.shipping)+' | <strong>Total '+money.format(o.total)+'</strong></div>'+
+            (o.notes?'<div class="muted">Notes: '+esc(o.notes)+'</div>':'')+
+            '<div class="grid" style="margin-top:10px"><div><label>Status</label><select data-f="status">'+STATUSES.map(function(s){return '<option'+(s===o.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'+
+            '<div><label>Tracking number</label><input data-f="tracking_number" value="'+esc(o.tracking_number)+'"></div></div>'+
+            '<p style="margin:10px 0 0"><button class="btn sm" data-a="save">Save</button></p>';
+          d.querySelector('[data-a=save]').onclick=function(){
+            var u={}; d.querySelectorAll('[data-f]').forEach(function(el){ u[el.getAttribute('data-f')]=el.value.trim(); });
+            sb.from('orders').update(u).eq('id',o.id).then(function(x){ flash(x.error?'Could not save.':'Saved.',!!x.error); });
+          };
+          box.appendChild(d);
+        });
+      });
+    }
+    $('fs').onchange=load; $('fr').oninput=function(){ clearTimeout(window.__t); window.__t=setTimeout(load,350); };
+    load();
+  }
+
+  /* REPS */
+  function reps(){
+    var pane=$('pane'); pane.innerHTML='<h2>Rep links, visits and orders</h2><p class="muted">Each rep link ends with ?f=tag, for example your-site-address/?f=silvana. Visits and orders are counted per tag. Orders with canceled status are left out of totals.</p><div id="rlist">Loading...</div>';
+    Promise.all([
+      sb.from('visits').select('rep').limit(20000),
+      sb.from('orders').select('rep,total,status').limit(20000)
+    ]).then(function(r){
+      var map={};
+      function g(k){ k=k||'(no tag)'; if(!map[k]) map[k]={v:0,o:0,t:0}; return map[k]; }
+      (r[0].data||[]).forEach(function(x){ g(x.rep).v++; });
+      (r[1].data||[]).forEach(function(x){ if(x.status==='canceled') return; var m=g(x.rep); m.o++; m.t+=Number(x.total); });
+      var keys=Object.keys(map).sort();
+      if(!keys.length){ $('rlist').innerHTML='<p class="muted">No visits yet.</p>'; return; }
+      $('rlist').innerHTML='<table><tr><th>Rep tag</th><th>Visits</th><th>Orders</th><th>Order total</th></tr>'+
+        keys.map(function(k){ return '<tr><td>'+esc(k)+'</td><td>'+map[k].v+'</td><td>'+map[k].o+'</td><td>'+money.format(map[k].t)+'</td></tr>'; }).join('')+'</table>';
+    });
+  }
+
+  /* SETTINGS */
+  function settings(){
+    var pane=$('pane'); pane.innerHTML='<h2>Page settings</h2><div id="sbox">Loading...</div>';
+    sb.from('settings').select('*').eq('id',1).maybeSingle().then(function(r){
+      var s=r.data||{};
+      $('sbox').innerHTML='<div class="card" style="max-width:560px">'+
+        '<label>Page name</label><input id="s_name" value="'+esc(s.site_name)+'">'+
+        '<label>Phone number that receives orders by text</label><input id="s_phone" value="'+esc(s.order_phone)+'" placeholder="+19725550000">'+
+        '<label>Payment instructions shown on the page</label><textarea id="s_pay" rows="3">'+esc(s.payment_note)+'</textarea>'+
+        '<label>Shipping fee</label><input id="s_ship" type="number" step="0.01" min="0" value="'+esc(s.shipping_fee)+'">'+
+        '<label>Free shipping over (leave empty for none)</label><input id="s_free" type="number" step="0.01" min="0" value="'+esc(s.free_shipping_over==null?'':s.free_shipping_over)+'">'+
+        '<p><button class="btn" id="s_save">Save settings</button></p></div>';
+      $('s_save').onclick=function(){
+        var free=$('s_free').value.trim();
+        sb.from('settings').update({site_name:$('s_name').value.trim()||'Order Portal',order_phone:$('s_phone').value.trim(),
+          payment_note:$('s_pay').value,shipping_fee:Number($('s_ship').value)||0,free_shipping_over:free===''?null:Number(free)})
+        .eq('id',1).then(function(x){ flash(x.error?'Could not save.':'Saved.',!!x.error); });
+      };
+    });
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

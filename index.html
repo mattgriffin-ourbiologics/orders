@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Order Portal</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#000;line-height:1.45}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 80px}
+h1{font-size:1.6rem;margin:8px 0 4px}
+.sub{color:#444;margin:0 0 16px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.chip{border:1px solid #000;background:#fff;color:#000;border-radius:999px;padding:7px 14px;font-size:.9rem;cursor:pointer}
+.chip.on{background:#000;color:#fff}
+.cat{font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;margin:22px 0 6px;border-bottom:2px solid #000;padding-bottom:4px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #ddd}
+.pname{font-weight:600}
+.psize{color:#444;font-size:.9rem}
+.price{font-weight:600;white-space:nowrap}
+.qty{display:flex;align-items:center;gap:6px}
+.qty button{width:36px;height:36px;border:1px solid #000;background:#fff;font-size:1.2rem;border-radius:8px;cursor:pointer}
+.qty span{min-width:24px;text-align:center;font-weight:600}
+.panel{border:2px solid #000;border-radius:12px;padding:16px;margin-top:28px}
+.line{display:flex;justify-content:space-between;padding:4px 0}
+.total{font-size:1.2rem;font-weight:700;border-top:1px solid #000;margin-top:8px;padding-top:8px}
+label{display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;margin:14px 0 4px}
+input,textarea{width:100%;font-size:1rem;padding:12px;border:1px solid #000;border-radius:8px;background:#fff;color:#000;font-family:inherit}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pay{border:1px solid #000;border-radius:8px;padding:12px;margin-top:14px;background:#f4f4f4;white-space:pre-wrap}
+.go{width:100%;margin-top:18px;padding:16px;font-size:1.05rem;font-weight:700;background:#000;color:#fff;border:0;border-radius:10px;cursor:pointer}
+.go[disabled]{opacity:.4;cursor:not-allowed}
+.ghost{width:100%;margin-top:10px;padding:12px;background:#fff;color:#000;border:1px solid #000;border-radius:10px;cursor:pointer;font-size:.95rem}
+.small{font-size:.85rem;color:#444;margin-top:8px;text-align:center}
+.err{color:#b00020;font-weight:600;margin-top:10px}
+pre{white-space:pre-wrap;background:#f4f4f4;border:1px solid #ccc;border-radius:8px;padding:12px;font-size:.85rem}
+.empty{padding:28px 0;color:#444;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Order Portal</h1>
+  <p class="sub">Choose your items and quantities, then send your order by text.</p>
+  <div class="chips" id="chips"></div>
+  <div id="list"><div class="empty">Loading...</div></div>
+
+  <div class="panel" id="panel" hidden>
+    <div class="line"><span>Items</span><span id="count">0</span></div>
+    <div class="line"><span>Subtotal</span><span id="sub">$0.00</span></div>
+    <div class="line"><span>Shipping</span><span id="ship">$0.00</span></div>
+    <div class="line total"><span>Total</span><span id="tot">$0.00</span></div>
+
+    <div class="pay" id="pay" hidden></div>
+
+    <label for="name">First and last name</label>
+    <input id="name" autocomplete="name" placeholder="Jane Doe">
+    <label for="street">Shipping address</label>
+    <input id="street" autocomplete="address-line1" placeholder="Street address">
+    <input id="apt" autocomplete="address-line2" placeholder="Apt / Suite (optional)" style="margin-top:10px">
+    <div class="two" style="margin-top:10px">
+      <input id="city" autocomplete="address-level2" placeholder="City">
+      <input id="state" autocomplete="address-level1" placeholder="State">
+    </div>
+    <input id="zip" autocomplete="postal-code" inputmode="numeric" placeholder="ZIP code" style="margin-top:10px">
+    <label for="notes">Notes (optional)</label>
+    <textarea id="notes" rows="3" placeholder="Anything we should know?"></textarea>
+
+    <div class="err" id="err" hidden></div>
+    <button class="go" id="go">Send order by text</button>
+    <button class="ghost" id="copy" type="button">Copy order instead</button>
+    <div class="small">Opens your messaging app with the order already written out. Press send.</div>
+    <label>What gets sent</label>
+    <pre id="preview"></pre>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+  var cfg = window.PORTAL_CONFIG || {};
+  var sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  var rep = (new URLSearchParams(location.search).get('f') || '').trim().toLowerCase().replace(/[^a-z0-9_\-]/g,'').slice(0,60);
+  var money = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+  var settings = {site_name:'Order Portal',order_phone:'',payment_note:'',shipping_fee:0,free_shipping_over:null};
+  var products = [], qty = {}, cat = 'All';
+  var $ = function(id){return document.getElementById(id)};
+
+  function load(){
+    Promise.all([
+      sb.from('settings').select('*').eq('id',1).maybeSingle(),
+      sb.from('products').select('*').eq('active',true).order('sort',{ascending:true}).order('name',{ascending:true})
+    ]).then(function(r){
+      if(r[0].data) settings = r[0].data;
+      products = r[1].data || [];
+      document.title = settings.site_name;
+      $('title').textContent = settings.site_name;
+      if(settings.payment_note){ $('pay').hidden = false; $('pay').textContent = settings.payment_note; }
+      render();
+      sb.from('visits').insert({rep:rep}).then(function(){});
+    }).catch(function(){
+      $('list').innerHTML = '<div class="empty">This page could not load. Please try again later.</div>';
+    });
+  }
+
+  function render(){
+    var cats = ['All'];
+    products.forEach(function(p){ if(cats.indexOf(p.category)<0) cats.push(p.category); });
+    $('chips').innerHTML = '';
+    if(cats.length>2){
+      cats.forEach(function(c){
+        var b = document.createElement('button');
+        b.className = 'chip' + (c===cat?' on':'');
+        b.textContent = c;
+        b.onclick = function(){ cat = c; render(); };
+        $('chips').appendChild(b);
+      });
+    }
+    var list = $('list'); list.innerHTML = '';
+    if(!products.length){ list.innerHTML = '<div class="empty">No products are listed yet.</div>'; $('panel').hidden = true; return; }
+    var shown = products.filter(function(p){ return cat==='All' || p.category===cat; });
+    var last = null;
+    shown.forEach(function(p){
+      if(p.category !== last){
+        var h = document.createElement('div'); h.className='cat'; h.textContent = p.category; list.appendChild(h); last = p.category;
+      }
+      var row = document.createElement('div'); row.className='row';
+      var left = document.createElement('div');
+      var n = document.createElement('div'); n.className='pname'; n.textContent = p.name;
+      var s = document.createElement('div'); s.className='psize'; s.textContent = p.size;
+      left.appendChild(n); if(p.size) left.appendChild(s);
+      var right = document.createElement('div'); right.style.display='flex'; right.style.alignItems='center'; right.style.gap='14px';
+      var pr = document.createElement('div'); pr.className='price'; pr.textContent = money.format(Number(p.price));
+      var q = document.createElement('div'); q.className='qty';
+      var minus = document.createElement('button'); minus.textContent = '−'; minus.setAttribute('aria-label','Remove one');
+      var num = document.createElement('span'); num.textContent = qty[p.id]||0;
+      var plus = document.createElement('button'); plus.textContent = '+'; plus.setAttribute('aria-label','Add one');
+      minus.onclick = function(){ qty[p.id] = Math.max(0,(qty[p.id]||0)-1); num.textContent = qty[p.id]; totals(); };
+      plus.onclick = function(){ qty[p.id] = Math.min(99,(qty[p.id]||0)+1); num.textContent = qty[p.id]; totals(); };
+      q.appendChild(minus); q.appendChild(num); q.appendChild(plus);
+      right.appendChild(pr); right.appendChild(q);
+      row.appendChild(left); row.appendChild(right); list.appendChild(row);
+    });
+    $('panel').hidden = false;
+    totals();
+  }
+
+  function chosen(){
+    return products.filter(function(p){ return (qty[p.id]||0) > 0; }).map(function(p){
+      return {product_id:p.id,name:p.name,size:p.size,lot_number:p.lot_number,price:Number(p.price),qty:qty[p.id]};
+    });
+  }
+  function calc(){
+    var items = chosen();
+    var sub = items.reduce(function(a,i){ return a + i.price*i.qty; },0);
+    var fee = Number(settings.shipping_fee)||0;
+    var free = settings.free_shipping_over;
+    if(items.length===0) fee = 0;
+    else if(free !== null && free !== undefined && free !== '' && sub >= Number(free)) fee = 0;
+    sub = Math.round(sub*100)/100;
+    return {items:items, sub:sub, fee:fee, total:Math.round((sub+fee)*100)/100,
+            count: items.reduce(function(a,i){return a+i.qty;},0)};
+  }
+  function val(id){ return $(id).value.trim(); }
+  function orderText(c, id){
+    var addr = val('street') + (val('apt') ? ', ' + val('apt') : '') + ', ' + val('city') + ', ' + val('state') + ' ' + val('zip');
+    var lines = ['New order' + (rep ? ' (from ' + rep + ')' : ''), 'Order ' + id.slice(0,8), '',
+      'Name: ' + val('name'), 'Ship to: ' + addr, '', 'Items:'];
+    c.items.forEach(function(i){ lines.push(i.qty + ' x ' + i.name + (i.size ? ' (' + i.size + ')' : '') + ' = ' + money.format(i.price*i.qty)); });
+    lines.push('', 'Subtotal: ' + money.format(c.sub), 'Shipping: ' + money.format(c.fee), 'Total: ' + money.format(c.total));
+    if(val('notes')) lines.push('', 'Notes: ' + val('notes'));
+    return lines.join('\n');
+  }
+  var previewId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+  function totals(){
+    var c = calc();
+    $('count').textContent = c.count; $('sub').textContent = money.format(c.sub);
+    $('ship').textContent = money.format(c.fee); $('tot').textContent = money.format(c.total);
+    $('preview').textContent = c.count ? orderText(c, previewId) : 'Add items to see your order.';
+    $('go').disabled = !c.count;
+  }
+  ['name','street','apt','city','state','zip','notes'].forEach(function(id){ $(id).addEventListener('input', totals); });
+
+  function check(){
+    var need = [['name','your name'],['street','your street address'],['city','your city'],['state','your state'],['zip','your ZIP code']];
+    for(var i=0;i<need.length;i++){ if(!val(need[i][0])) return 'Please enter ' + need[i][1] + '.'; }
+    return '';
+  }
+  $('go').onclick = function(){
+    $('err').hidden = true;
+    var msg = check(); if(msg){ $('err').textContent = msg; $('err').hidden = false; return; }
+    var c = calc(); if(!c.count) return;
+    var id = previewId;
+    var text = orderText(c, id);
+    var phone = String(settings.order_phone||'').replace(/[^0-9+]/g,'');
+    $('go').disabled = true;
+    sb.from('orders').insert({
+      id:id, rep:rep, customer_name:val('name'), street:val('street'), apt:val('apt'), city:val('city'),
+      state:val('state'), zip:val('zip'), notes:val('notes'), items:c.items, subtotal:c.sub, shipping:c.fee, total:c.total
+    }).then(function(r){
+      if(r.error){ $('err').textContent = 'Your order could not be saved here, but your text will still open.'; $('err').hidden = false; }
+      previewId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+      location.href = 'sms:' + phone + '?&body=' + encodeURIComponent(text);
+      setTimeout(function(){ $('go').disabled = false; }, 1500);
+    });
+  };
+  $('copy').onclick = function(){
+    var msg = check(); if(msg){ $('err').textContent = msg; $('err').hidden = false; return; }
+    var c = calc(); if(!c.count) return;
+    var text = orderText(c, previewId);
+    if(navigator.clipboard){ navigator.clipboard.writeText(text).then(function(){ $('copy').textContent = 'Copied'; setTimeout(function(){ $('copy').textContent = 'Copy order instead'; },2000); }); }
+  };
+  load();
+})();
+</script>
+</body>
+</html>
